@@ -51,3 +51,90 @@ function validLiveData(d){return !!(d&&d.revenue&&d.cost&&(d.revenue.total>0||d.
 async function init(){months.forEach(m=>$('#monthSelect').insertAdjacentHTML('beforeend',`<option value="${m}">Tháng ${m}/2026</option>`));$('#monthSelect').value=9;const snapshot=fallbackData();state.data={...snapshot};const results=await Promise.allSettled(months.map(loadMonth));let live=0;results.forEach((r,i)=>{if(r.status==='fulfilled'&&validLiveData(r.value)){state.data[months[i]]=r.value;live++}});state.loading=false;$('#dot').classList.toggle('live',live>0);$('#syncText').textContent=live?`Đã đồng bộ · ${new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})}`:'Dữ liệu gần nhất';if(live<months.length){$('#notice').textContent=live?`Đã đồng bộ ${live}/${months.length} tab; các tab còn lại đang dùng dữ liệu gần nhất.`:'Google tạm thời chưa phản hồi; dashboard đang hiển thị dữ liệu gần nhất đã kiểm tra từ Sheet.';$('#notice').classList.add('show')}render()}
  $('#periodBtns').onclick=e=>{const p=e.target.dataset.period;if(p)setPeriod(p)};$('#monthSelect').onchange=e=>{state.month=+e.target.value;setPeriod('month')};$('#closeModal').onclick=()=>$('#modal').classList.remove('open');$('#modal').onclick=e=>{if(e.target.id==='modal')$('#modal').classList.remove('open')};document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#modal').classList.remove('open')});$('#openSheet').onclick=()=>window.open(SOURCE,'_blank');document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-go]').forEach(x=>x.classList.toggle('active',x===b));if(b.dataset.go==='trend')openTrendDetail();else if(b.dataset.go==='channels')openChannelsOverview();else document.getElementById('overview')?.scrollIntoView({behavior:'smooth'})});init();setInterval(async()=>{try{const fresh=await loadMonth(state.month);if(validLiveData(fresh)){state.data[state.month]=fresh;render();$('#syncText').textContent=`Đã đồng bộ · ${new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})}`}}catch(e){}},60000);
 </script></body></html>
+</script><script>
+(() => {
+  if (window.__liveSheetRefreshInstalled) return;
+  window.__liveSheetRefreshInstalled = true;
+  const candidates = Array.from({ length: 12 }, (_, i) => 12 - i);
+  const liveMonths = new Set();
+  let probing = false;
+  let probeIndex = 0;
+  function updateMonthList(preferNewest = false) {
+    const available = [...liveMonths].sort((a, b) => b - a);
+    months.splice(0, months.length, ...available);
+    const select = $('#monthSelect');
+    select.innerHTML = available.map(m => '<option value="' + m + '">Tháng ' + m + '/' + DASH_YEAR + '</option>').join('');
+    if (!available.length) return;
+    const chosen = preferNewest || !available.includes(state.month) ? available[0] : state.month;
+    state.month = chosen;
+    select.value = String(chosen);
+    render();
+  }
+  async function refreshMonth(m) {
+    try {
+      const oldLatest = liveMonths.size ? Math.max(...liveMonths) : 0;
+      const fresh = await loadMonth(m);
+      if (!validLiveData(fresh)) return false;
+      state.data[m] = fresh;
+      liveMonths.add(m);
+      const newLatest = Math.max(...liveMonths);
+      updateMonthList(newLatest > oldLatest);
+      $('#dot').classList.add('live');
+      $('#syncText').textContent = 'Đã đồng bộ · ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      $('#notice').classList.remove('show');
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+  async function scanMonths() {
+    if (probing) return;
+    probing = true;
+    $('#syncText').textContent = 'Đang kiểm tra các tab tháng…';
+    const results = await Promise.allSettled(candidates.map(loadMonth));
+    const liveData = {};
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled' && validLiveData(result.value)) {
+        const month = candidates[index];
+        liveData[month] = result.value;
+        liveMonths.add(month);
+      }
+    });
+    state.data = liveData;
+    if (liveMonths.size) {
+      updateMonthList(true);
+      $('#dot').classList.add('live');
+      $('#syncText').textContent = 'Đã đồng bộ · ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      $('#notice').classList.remove('show');
+    } else {
+      $('#dot').classList.remove('live');
+      $('#syncText').textContent = 'Chưa kết nối được Google Sheets';
+      $('#notice').textContent = 'Không tải được dữ liệu trực tiếp. Kiểm tra quyền xem của Sheet rồi tải lại trang.';
+      $('#notice').classList.add('show');
+      $('#kpis').innerHTML = '<div class="error">Chưa đọc được dữ liệu mới từ Google Sheet.</div>';}
+    probing = false;
+  }
+  $('#monthSelect').onchange = async event => {
+    const month = Number(event.target.value);
+    state.month = month;
+    setPeriod('month');
+    $('#syncText').textContent = 'Đang cập nhật tháng đã chọn…';
+    if (!(await refreshMonth(month))) {
+      $('#syncText').textContent = 'Đang hiển thị dữ liệu đã tải trước đó';
+      $('#notice').textContent = 'Chưa tải mới được tab tháng ' + month + '; dữ liệu hiện tại đang được giữ nguyên.';
+      $('#notice').classList.add('show');}
+  };
+  (async () => {
+    while (state.loading) await new Promise(resolve => setTimeout(resolve, 150));
+    await scanMonths();
+    setInterval(async () => {
+      const current = new Date().getMonth() + 1;
+      const next = current === 12 ? 1 : current + 1;
+      await refreshMonth(current);
+      if (!liveMonths.has(next)) await refreshMonth(next);
+      const unknown = candidates.filter(m => !liveMonths.has(m) && m !== current && m !== next);
+      if (unknown.length) await refreshMonth(unknown[probeIndex++ % unknown.length]);
+    }, 60000);
+  })();
+})();
+</script></body></html>

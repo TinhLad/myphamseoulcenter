@@ -55,7 +55,7 @@ async function init(){months.forEach(m=>$('#monthSelect').insertAdjacentHTML('be
 (() => {
   if (window.__liveSheetRefreshInstalled) return;
   window.__liveSheetRefreshInstalled = true;
-  const candidates = Array.from({ length: 12 }, (_, i) => 12 - i);
+  const knownMonths=[10,9,8,7,6,5,4,3],currentMonth=new Date().getMonth()+1,nextMonth=currentMonth===12?1:currentMonth+1,candidates=[...new Set([...knownMonths,currentMonth,nextMonth])];
   const liveMonths = new Set();
   let probing = false;
   let probeIndex = 0;
@@ -74,7 +74,7 @@ async function init(){months.forEach(m=>$('#monthSelect').insertAdjacentHTML('be
     try {
       const oldLatest = liveMonths.size ? Math.max(...liveMonths) : 0;
       const fresh = await loadMonth(m);
-      if (!validLiveData(fresh)) return false;
+      if (!validLiveData(fresh)) return false; const latestData=state.data[Math.max(0,...liveMonths)]; if (!knownMonths.includes(m) && latestData && JSON.stringify(fresh.raw)===JSON.stringify(latestData.raw)) return false;
       state.data[m] = fresh;
       liveMonths.add(m);
       const newLatest = Math.max(...liveMonths);
@@ -94,7 +94,7 @@ async function init(){months.forEach(m=>$('#monthSelect').insertAdjacentHTML('be
     const results = await Promise.allSettled(candidates.map(loadMonth));
     const liveData = {};
     results.forEach((result, index) => {
-      if (result.status === 'fulfilled' && validLiveData(result.value)) {
+      if (result.status === 'fulfilled' && validLiveData(result.value) && (knownMonths.includes(candidates[index]) || !Object.values(liveData).some(d => JSON.stringify(d.raw) === JSON.stringify(result.value.raw)))) {
         const month = candidates[index];
         liveData[month] = result.value;
         liveMonths.add(month);

@@ -137,8 +137,7 @@
     <section class="content">
       <div class="notice" id="notice"></div>
       <div class="overview" id="overview"><div><div class="eyebrow">Tổng quan hiệu suất</div><h2 id="periodTitle">—</h2></div><div class="summary-note">Bấm vào thẻ hoặc cột để xem chi tiết<br/>Nguồn: Google Sheets công khai</div></div>
-      <div class="headline tone-none" id="headline"></div>
-      <div class="section-title" id="targetsTitle"><h3>Tiến độ so với kế hoạch</h3><small id="targetsSub"></small></div>
+            <div class="section-title" id="targetsTitle"><h3>Tiến độ so với kế hoạch</h3><small id="targetsSub"></small></div>
       <div class="targets" id="targets"></div>
       <div class="section-title"><h3>Chỉ số chính</h3><small>So với kỳ trước · đường nhỏ = diễn biến 5 tuần</small></div>
       <div class="kpis" id="kpis"></div>
@@ -218,7 +217,7 @@ function targetModel(d){const rev=selected(d.revenue),cost=selected(d.cost),rati
  const ratioTone=!Number.isFinite(pRatio)||!Number.isFinite(ratio)?'none':ratio<=pRatio?'good':ratio<=pRatio*1.5?'warn':'bad';
  return{rev,cost,ratio,pRev,pCost,pRatio,el,running,revPct,costPct,revTone,costTone,ratioTone}}
 
-function renderTargets(d){const t=targetModel(d),box=$('#targets'),hl=$('#headline');const per=state.period==='month'?'tháng':'tuần';
+function renderTargets(d){const t=targetModel(d),box=$('#targets'),hl=$('#headline')||document.createElement('div');const per=state.period==='month'?'tháng':'tuần';
  $('#targetsSub').textContent=t.running?`Vạch trắng = mốc thời gian (đã qua ${pctP(t.el,0)} tháng)`:`Kế hoạch ${per} lấy từ phần “Kế hoạch” trong Sheet`;
  if(!d.plan){box.innerHTML='<div class="target" style="grid-column:1/-1"><div class="empty">Tab tháng này chưa có phần “Kế hoạch” trong Google Sheet.</div></div>';hl.className='headline tone-none';hl.innerHTML=`<div class="hl-icon">·</div><div>Doanh thu ${fmtShort(t.rev)}, chi phí Ads ${fmtShort(t.cost)} — tỷ lệ CP/DT <b>${pctP(t.ratio)}</b>.</div>`;return}
  const revLabel={good:'✓ Đúng tiến độ',warn:'! Cần tăng tốc',bad:'✕ Chậm tiến độ',none:'—'}[t.revTone];
